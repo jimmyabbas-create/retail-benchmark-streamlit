@@ -4,7 +4,7 @@ import os
 
 # ===================== CONFIGURATION =====================
 
-HQ_PASSWORD = "benchmark@hq"   # change this to something only you know
+HQ_PASSWORD = "benchmark@hq"   # change if required
 
 COMPANY_OPTIONS = [
     "Reliance Retail",
@@ -21,16 +21,26 @@ MONTHS = [
 
 YEARS = [2024, 2025, 2026]
 
+# MASTER CLUSTER LIST – THIS DRIVES SUBMISSION TRACKING
+EXPECTED_CLUSTERS = [
+    "North 1", "North 2", "North 3",
+    "West 1", "West 2", "West 3",
+    "South 1", "South 2", "South 3", "South 4",
+    "East 1", "East 2", "East 3",
+    "Central 1", "Central 2"
+    # Extend this list to all 52 clusters
+]
+
 DATA_FILE = "cluster_inputs.csv"
 
 # ===================== APP SETUP =====================
 
 st.set_page_config(
-    page_title="Retail Benchmark Data Collection",
+    page_title="Retail Benchmark System",
     layout="wide"
 )
 
-st.title("Cluster Data Entry")
+st.title("Cluster Benchmark Data Entry")
 
 # ===================== LOAD DATA =====================
 
@@ -55,14 +65,14 @@ else:
 # ===================== INPUT FORM =====================
 
 with st.form("cluster_form"):
-    st.subheader("Enter Cluster Data")
+    st.subheader("Submit Cluster Data")
 
     col1, col2 = st.columns(2)
 
     with col1:
         year = st.selectbox("Year", YEARS)
         month = st.selectbox("Month", MONTHS)
-        cluster = st.text_input("Cluster name")
+        cluster = st.selectbox("Cluster", EXPECTED_CLUSTERS)
         company = st.selectbox("Company", COMPANY_OPTIONS)
         stores = st.number_input("Total number of stores", min_value=0, step=1)
         area = st.number_input("Retail area (mn sq. ft.)", min_value=0.0)
@@ -102,9 +112,9 @@ if submitted:
     data = pd.concat([data, new_row], ignore_index=True)
     data.to_csv(DATA_FILE, index=False)
 
-    st.success("Data submitted successfully")
+    st.success("Submission recorded successfully")
 
-# ===================== HQ BENCHMARK VIEW =====================
+# ===================== HQ VIEW =====================
 
 st.divider()
 st.subheader("HQ Benchmark View")
@@ -113,19 +123,56 @@ hq_access = st.text_input("HQ Access Password", type="password")
 
 if hq_access == HQ_PASSWORD and not data.empty:
 
+    # ---------- Filters ----------
+    colf1, colf2 = st.columns(2)
+    with colf1:
+        hq_year = st.selectbox("HQ View – Year", YEARS)
+    with colf2:
+        hq_month = st.selectbox("HQ View – Month", MONTHS)
+
+    filtered = data[
+        (data["Year"] == hq_year) &
+        (data["Month"] == hq_month)
+    ]
+
+    # ---------- Submission Status ----------
+    st.markdown("### Submission Status")
+
+    submitted_clusters = set(filtered["Cluster"].unique())
+    expected_clusters = set(EXPECTED_CLUSTERS)
+    pending_clusters = sorted(list(expected_clusters - submitted_clusters))
+
+    col_s1, col_s2, col_s3 = st.columns(3)
+    col_s1.metric("Clusters Expected", len(expected_clusters))
+    col_s2.metric("Clusters Submitted", len(submitted_clusters))
+    col_s3.metric("Clusters Pending", len(pending_clusters))
+
+    if pending_clusters:
+        st.warning("Pending cluster submissions")
+        st.table(pd.DataFrame({"Pending Clusters": pending_clusters}))
+    else:
+        st.success("All clusters have submitted data")
+
+    # ---------- Cluster-Level Detail ----------
+    st.markdown("### Cluster-Level Detail")
+    st.dataframe(
+        filtered.sort_values(["Cluster", "Company"]),
+        use_container_width=True
+    )
+
+    # ---------- National Summary ----------
+    st.markdown("### National Benchmark Summary")
+
     summary_rows = []
 
-    grouped = data.groupby(["Year", "Month", "Company"])
+    grouped = filtered.groupby(["Company"])
 
-    for (year, month, company), d in grouped:
-
+    for company, d in grouped:
         total_stores = d["Stores"].sum()
         total_area = d["Area_mn_sqft"].sum()
         total_revenue = (d["Revenue_per_store"] * d["Stores"]).sum()
 
         summary_rows.append({
-            "Year": year,
-            "Month": month,
             "Company": company,
             "Total number of stores": total_stores,
             "Retail area (mn sq. ft.)": total_area,
