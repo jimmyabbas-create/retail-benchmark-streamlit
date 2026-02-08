@@ -109,12 +109,20 @@ if submitted:
 
 st.divider()
 st.subheader("Your Submissions (Cluster View)")
-
 cluster_data = data[data["Cluster"] == cluster]
 
 if not cluster_data.empty:
+
+    # Handle legacy rows without Week column
+    if "Week" not in cluster_data.columns:
+        cluster_data["Week"] = None
+
     st.dataframe(
-        cluster_data.sort_values(["Year", "Week"], ascending=False),
+        cluster_data.sort_values(
+            by=["Year", "Week"],
+            ascending=[False, False],
+            na_position="last"
+        ),
         use_container_width=True
     )
 else:
