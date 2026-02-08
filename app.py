@@ -4,31 +4,26 @@ import os
 
 # ===================== CONFIGURATION =====================
 
-HQ_PASSWORD = "benchmark@hq"   # change if required
+HQ_PASSWORD = "benchmark@hq"   # change if needed
 
 COMPANY_OPTIONS = [
-    "Reliance Retail",
+    "Reliance Digital",
     "Croma",
     "Vijay Sales",
     "Bajaj Electronics",
     "Other"
 ]
 
-MONTHS = [
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
-]
-
 YEARS = [2024, 2025, 2026]
+WEEKS = list(range(1, 53))
 
-# MASTER CLUSTER LIST – THIS DRIVES SUBMISSION TRACKING
 EXPECTED_CLUSTERS = [
     "North 1", "North 2", "North 3",
     "West 1", "West 2", "West 3",
     "South 1", "South 2", "South 3", "South 4",
     "East 1", "East 2", "East 3",
     "Central 1", "Central 2"
-    # Extend this list to all 52 clusters
+    # extend to all 52 clusters
 ]
 
 DATA_FILE = "cluster_inputs.csv"
@@ -36,11 +31,11 @@ DATA_FILE = "cluster_inputs.csv"
 # ===================== APP SETUP =====================
 
 st.set_page_config(
-    page_title="Retail Benchmark System",
+    page_title="Weekly Cluster Benchmark – Reliance Digital",
     layout="wide"
 )
 
-st.title("Cluster Benchmark Data Entry")
+st.title("Weekly Cluster Data Entry – Reliance Digital")
 
 # ===================== LOAD DATA =====================
 
@@ -49,7 +44,7 @@ if os.path.exists(DATA_FILE):
 else:
     data = pd.DataFrame(columns=[
         "Year",
-        "Month",
+        "Week",
         "Cluster",
         "Company",
         "Stores",
@@ -65,13 +60,13 @@ else:
 # ===================== INPUT FORM =====================
 
 with st.form("cluster_form"):
-    st.subheader("Submit Cluster Data")
+    st.subheader("Submit Weekly Cluster Data")
 
     col1, col2 = st.columns(2)
 
     with col1:
         year = st.selectbox("Year", YEARS)
-        month = st.selectbox("Month", MONTHS)
+        week = st.selectbox("Week number", WEEKS)
         cluster = st.selectbox("Cluster", EXPECTED_CLUSTERS)
         company = st.selectbox("Company", COMPANY_OPTIONS)
         stores = st.number_input("Total number of stores", min_value=0, step=1)
@@ -81,11 +76,7 @@ with st.form("cluster_form"):
     with col2:
         rev_store = st.number_input("Revenue per store (Rs. crore)", min_value=0.0)
         margin_store = st.number_input("Margin per store (Rs. crore)", min_value=0.0)
-        lfl = st.number_input(
-            "LFL growth in revenue (%)",
-            min_value=-100.0,
-            max_value=100.0
-        )
+        lfl = st.number_input("LFL growth in revenue (%)", min_value=-100.0, max_value=100.0)
         bills = st.number_input("# of bills per store", min_value=0, step=1)
         abv = st.number_input("Average bill value (Rs.)", min_value=0.0)
 
@@ -96,7 +87,7 @@ with st.form("cluster_form"):
 if submitted:
     new_row = pd.DataFrame([{
         "Year": year,
-        "Month": month,
+        "Week": week,
         "Cluster": cluster,
         "Company": company,
         "Stores": stores,
@@ -112,7 +103,22 @@ if submitted:
     data = pd.concat([data, new_row], ignore_index=True)
     data.to_csv(DATA_FILE, index=False)
 
-    st.success("Submission recorded successfully")
+    st.success("Weekly submission recorded successfully")
+
+# ===================== CLUSTER MANAGER VIEW =====================
+
+st.divider()
+st.subheader("Your Submissions (Cluster View)")
+
+cluster_data = data[data["Cluster"] == cluster]
+
+if not cluster_data.empty:
+    st.dataframe(
+        cluster_data.sort_values(["Year", "Week"], ascending=False),
+        use_container_width=True
+    )
+else:
+    st.info("No submissions found for this cluster yet.")
 
 # ===================== HQ VIEW =====================
 
@@ -123,16 +129,15 @@ hq_access = st.text_input("HQ Access Password", type="password")
 
 if hq_access == HQ_PASSWORD and not data.empty:
 
-    # ---------- Filters ----------
     colf1, colf2 = st.columns(2)
     with colf1:
         hq_year = st.selectbox("HQ View – Year", YEARS)
     with colf2:
-        hq_month = st.selectbox("HQ View – Month", MONTHS)
+        hq_week = st.selectbox("HQ View – Week", WEEKS)
 
     filtered = data[
         (data["Year"] == hq_year) &
-        (data["Month"] == hq_month)
+        (data["Week"] == hq_week)
     ]
 
     # ---------- Submission Status ----------
@@ -151,21 +156,18 @@ if hq_access == HQ_PASSWORD and not data.empty:
         st.warning("Pending cluster submissions")
         st.table(pd.DataFrame({"Pending Clusters": pending_clusters}))
     else:
-        st.success("All clusters have submitted data")
+        st.success("All clusters have submitted for this week")
 
     # ---------- Cluster-Level Detail ----------
     st.markdown("### Cluster-Level Detail")
-    st.dataframe(
-        filtered.sort_values(["Cluster", "Company"]),
-        use_container_width=True
-    )
+    st.dataframe(filtered.sort_values(["Cluster", "Company"]), use_container_width=True)
 
     # ---------- National Summary ----------
     st.markdown("### National Benchmark Summary")
 
     summary_rows = []
 
-    grouped = filtered.groupby(["Company"])
+    grouped = filtered.groupby("Company")
 
     for company, d in grouped:
         total_stores = d["Stores"].sum()
@@ -176,9 +178,7 @@ if hq_access == HQ_PASSWORD and not data.empty:
             "Company": company,
             "Total number of stores": total_stores,
             "Retail area (mn sq. ft.)": total_area,
-            "Revenue per store (Rs. crore)": (
-                total_revenue / total_stores if total_stores else 0
-            ),
+            "Revenue per store (Rs. crore)": total_revenue / total_stores if total_stores else 0,
             "Margin per store (Rs. crore)": (
                 (d["Margin_per_store"] * d["Stores"]).sum() / total_stores
                 if total_stores else 0
@@ -208,8 +208,7 @@ if hq_access == HQ_PASSWORD and not data.empty:
             )
         })
 
-    summary_df = pd.DataFrame(summary_rows)
-    st.dataframe(summary_df, use_container_width=True)
+    st.dataframe(pd.DataFrame(summary_rows), use_container_width=True)
 
 elif hq_access:
     st.error("Invalid HQ password")
